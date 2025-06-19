@@ -1,0 +1,239 @@
+name: Autofix on Workflow Failure
+
+on:
+  workflow_run:
+    # Monitor all workflows in the repository
+    workflows: ["*"]
+    types: [completed]
+    branches: [main, develop]
+
+jobs:
+  create-failure-issue:
+    runs-on: ubuntu-latest
+    # Only run if the triggering workflow failed
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    
+    permissions:
+      issues: write
+      contents: read
+      actions: read
+    
+    steps:
+      - name: Get workflow logs
+        uses: actions/github-script@v7
+        id: get-logs
+        with:
+          script: |
+            const workflowRun = context.payload.workflow_run;
+            
+            // Get the jobs for this workflow run
+            const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: workflowRun.id
+            });
+            
+            let allLogs = '';
+            let failedJobs = [];
+            
+            for (const job of jobs.jobs) {
+              if (job.conclusion === 'failure') {
+                failedJobs.push({
+                  name: job.name,
+                  conclusion: job.conclusion,
+                  started_at: job.started_at,
+                  completed_at: job.completed_at,
+                  html_url: job.html_url
+                });
+                
+                try {
+                  // Get logs for failed job
+                  const { data: logs } = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    job_id: job.id
+                  });
+                  
+                  allLogs += `\n\n=== JOB: ${job.name} ===\n`;
+                  allLogs += logs;
+                } catch (error) {
+                  console.log(`Could not fetch logs for job ${job.name}: ${error.message}`);
+                  allLogs += `\n\n=== JOB: ${job.name} ===\n`;
+                  allLogs += `Log retrieval failed: ${error.message}`;
+                }
+              }
+            }
+            
+            // Truncate logs if too long (GitHub has limits)
+            if (allLogs.length > 50000) {
+              allLogs = allLogs.substring(allLogs.length - 50000);
+              allLogs = "... (logs truncated) ...\n" + allLogs;
+            }
+            
+            return {
+              logs: allLogs,
+              failedJobs: failedJobs,
+              workflowInfo: {
+                name: workflowRun.name,
+                branch: workflowRun.head_branch,
+                event: workflowRun.event,
+                conclusion: workflowRun.conclusion
+              }
+            };
+
+      - name: Analyze failure with AI
+        uses: actions/ai-inference@v1
+        id: ai-analysis
+        with:
+          model: gpt-4o-mini
+          prompt: |
+            You are an expert DevOps engineer analyzing a GitHub Actions workflow failure. 
+            
+            Please analyze the following workflow failure information and provide a detailed technical summary of what caused the failure. 
+            
+            **IMPORTANT**: Do NOT propose any fixes or solutions. Only analyze and explain what went wrong.
+            
+            **Workflow Information:**
+            - Workflow Name: ${{ fromJson(steps.get-logs.outputs.result).workflowInfo.name }}
+            - Branch: ${{ fromJson(steps.get-logs.outputs.result).workflowInfo.branch }}
+            - Event: ${{ fromJson(steps.get-logs.outputs.result).workflowInfo.event }}
+            - Conclusion: ${{ fromJson(steps.get-logs.outputs.result).workflowInfo.conclusion }}
+            
+            **Failed Jobs:**
+            ${{ toJson(fromJson(steps.get-logs.outputs.result).failedJobs) }}
+            
+            **Workflow Logs:**
+            ```
+            ${{ fromJson(steps.get-logs.outputs.result).logs }}
+            ```
+            
+            Please provide your analysis in the following format:
+            
+            ## 🔍 Failure Analysis
+            
+            ### Root Cause
+            [Identify the primary cause of the failure]
+            
+            ### Technical Details
+            [Provide specific technical details about what went wrong]
+            
+            ### Error Categories
+            [Categorize the type of error - compilation, test failure, dependency issue, infrastructure, etc.]
+            
+            ### Impact Assessment
+            [Describe what functionality or processes are affected]
+            
+            ### Additional Context
+            [Any other relevant observations about the failure]
+
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowRun = context.payload.workflow_run;
+            
+            // Create a descriptive title
+            const title = `🚨 Workflow Failure: ${workflowRun.name} on ${workflowRun.head_branch}`;
+            
+            // Create detailed issue body with AI analysis
+            const aiAnalysis = `${{ steps.ai-analysis.outputs.response }}`;
+            
+            const body = `## Workflow Failure Report
+            
+            A workflow has failed and requires attention.
+            
+            ### 📋 Failure Details
+            - **Workflow Name:** ${workflowRun.name}
+            - **Branch:** ${workflowRun.head_branch}
+            - **Commit SHA:** ${workflowRun.head_sha}
+            - **Run Number:** ${workflowRun.run_number}
+            - **Triggered by:** ${workflowRun.triggering_actor?.login || 'Unknown'}
+            - **Event:** ${workflowRun.event}
+            
+            ### 🔗 Links
+            - [View Failed Workflow Run](${workflowRun.html_url})
+            - [View Commit](${workflowRun.head_commit?.url || 'N/A'})
+            
+            ### 📝 Commit Message
+            \`\`\`
+            ${workflowRun.head_commit?.message || 'No commit message available'}
+            \`\`\`
+            
+            ${aiAnalysis}
+            
+            ### 🔧 Next Steps
+            1. Review the AI analysis above for failure details
+            2. Check the workflow logs for additional context
+            3. Implement necessary fixes based on the root cause
+            4. Re-run the workflow after fixes are applied
+            
+            ### 🏷️ Auto-generated
+            This issue was automatically created by the Actions-Autofix workflow with AI-powered failure analysis.
+            
+            **Created:** ${new Date().toISOString()}
+            **Workflow Run ID:** ${workflowRun.id}`;
+            
+            // Check if a similar issue already exists
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'workflow-failure,automated',
+              per_page: 100
+            });
+            
+            // Look for existing issue with same workflow and branch
+            const duplicateIssue = existingIssues.find(issue => 
+              issue.title.includes(`${workflowRun.name} on ${workflowRun.head_branch}`)
+            );
+            
+            if (duplicateIssue) {
+              console.log(`Duplicate issue found: #${duplicateIssue.number}`);
+              
+              // Add a comment to the existing issue instead of creating a new one
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: duplicateIssue.number,
+                body: `## 🔄 Additional Failure
+                
+                The workflow **${workflowRun.name}** has failed again on branch **${workflowRun.head_branch}**.
+                
+                - **New Run:** [#${workflowRun.run_number}](${workflowRun.html_url})
+                - **Commit:** ${workflowRun.head_sha}
+                - **Time:** ${new Date().toISOString()}
+                
+                ### 🤖 AI Analysis of Latest Failure
+                ${aiAnalysis}
+                
+                Please review the latest failure logs and AI analysis above.`
+              });
+              
+              return { action: 'commented', issue: duplicateIssue.number };
+            } else {
+              // Create new issue
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: [
+                  'bug',
+                  'workflow-failure',
+                  'automated',
+                  `workflow:${workflowRun.name}`,
+                  `branch:${workflowRun.head_branch}`
+                ]
+              });
+              
+              console.log(`Created issue #${issue.number}`);
+              return { action: 'created', issue: issue.number };
+            }
+      
+      - name: Report action taken
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowRun = context.payload.workflow_run;
+            console.log(`✅ Action completed for workflow: ${workflowRun.name}`);
+            console.log(`🔗 Workflow URL: ${workflowRun.html_url}`);

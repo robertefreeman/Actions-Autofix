@@ -1,0 +1,233 @@
+name: Test Failure Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      failure_type:
+        description: 'Type of failure to simulate'
+        required: true
+        default: 'test_failure'
+        type: choice
+        options:
+          - test_failure
+          - build_failure
+          - dependency_failure
+          - environment_failure
+          - timeout_failure
+          - script_error
+  push:
+    branches: 
+      - main
+      - develop
+    paths:
+      - '.github/workflows/test-failure.yml'
+
+jobs:
+  simulate-test-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.failure_type == 'test_failure' || github.event.inputs.failure_type == '' || github.event_name == 'push' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: |
+          echo "Installing fake dependencies..."
+          npm init -y
+          npm install jest
+          
+      - name: Create failing test
+        run: |
+          mkdir -p tests
+          cat > tests/failing.test.js << 'EOF'
+          describe('Authentication Tests', () => {
+            test('should authenticate user with valid credentials', () => {
+              // This test is designed to fail
+              const user = authenticateUser('testuser', 'wrongpassword');
+              expect(user).toBeDefined();
+              expect(user.isAuthenticated).toBe(true);
+            });
+            
+            test('should handle database connection', () => {
+              // Another failing test
+              const dbConnection = connectToDatabase(process.env.DATABASE_URL);
+              expect(dbConnection.isConnected).toBe(true);
+            });
+          });
+          
+          function authenticateUser(username, password) {
+            // Simulated authentication that always fails
+            return { isAuthenticated: false };
+          }
+          
+          function connectToDatabase(url) {
+            // Simulated database connection that fails
+            throw new Error('Database connection failed: Connection timeout');
+          }
+          EOF
+          
+      - name: Run failing tests
+        run: |
+          echo "Running test suite..."
+          npx jest tests/failing.test.js --verbose
+
+  simulate-build-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.failure_type == 'build_failure' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Create failing Python code
+        run: |
+          cat > app.py << 'EOF'
+          import os
+          import requests
+          from nonexistent_module import some_function
+          
+          def main():
+              # This will cause import error
+              result = some_function()
+              
+              # This will cause undefined variable error
+              print(undefined_variable)
+              
+              # This will cause syntax error in next line
+              if True
+                  print("Syntax error here")
+          
+          if __name__ == "__main__":
+              main()
+          EOF
+          
+      - name: Attempt to run failing code
+        run: |
+          echo "Attempting to run Python application..."
+          python app.py
+
+  simulate-dependency-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.failure_type == 'dependency_failure' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Try to install non-existent package
+        run: |
+          echo "Attempting to install non-existent packages..."
+          npm install nonexistent-package-that-does-not-exist@999.999.999
+          
+      - name: Try to use unavailable system tool
+        run: |
+          echo "Attempting to use unavailable system tool..."
+          some-nonexistent-command --version
+
+  simulate-environment-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.failure_type == 'environment_failure' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Attempt to access missing environment variables
+        run: |
+          echo "Required environment variable: $REQUIRED_SECRET"
+          echo "Database URL: $DATABASE_URL"
+          echo "API Key: $API_KEY"
+          
+          # These will fail because the variables don't exist
+          if [ -z "$REQUIRED_SECRET" ]; then
+            echo "ERROR: REQUIRED_SECRET environment variable is not set"
+            exit 1
+          fi
+          
+      - name: Try to access missing files
+        run: |
+          echo "Attempting to read configuration file..."
+          cat /nonexistent/config/file.json
+          
+      - name: Try to connect to unavailable service
+        run: |
+          echo "Attempting to connect to service..."
+          curl --fail --max-time 5 http://localhost:9999/health
+
+  simulate-timeout-failure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    if: ${{ github.event.inputs.failure_type == 'timeout_failure' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Long running process that will timeout
+        run: |
+          echo "Starting long running process..."
+          echo "This process will run longer than the 1-minute timeout"
+          
+          # Sleep for 2 minutes to trigger timeout
+          sleep 120
+          
+          echo "This should never be reached"
+
+  simulate-script-error:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.failure_type == 'script_error' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Script with multiple errors
+        run: |
+          echo "Starting script with intentional errors..."
+          
+          # Permission denied error
+          echo "Creating file in restricted directory..."
+          touch /root/restricted_file.txt
+          
+          # Command not found
+          echo "Running non-existent command..."
+          some_fake_command --option value
+          
+          # Division by zero in bash
+          echo "Performing mathematical operation..."
+          result=$((10 / 0))
+          
+          echo "Script completed successfully (this won't be reached)"
+
+  summary:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [simulate-test-failure, simulate-build-failure, simulate-dependency-failure, simulate-environment-failure, simulate-timeout-failure, simulate-script-error]
+    
+    steps:
+      - name: Report test results
+        run: |
+          echo "Test Failure Workflow Summary:"
+          echo "====================================="
+          
+          echo "Test Failure Job: ${{ needs.simulate-test-failure.result }}"
+          echo "Build Failure Job: ${{ needs.simulate-build-failure.result }}"
+          echo "Dependency Failure Job: ${{ needs.simulate-dependency-failure.result }}"
+          echo "Environment Failure Job: ${{ needs.simulate-environment-failure.result }}"
+          echo "Timeout Failure Job: ${{ needs.simulate-timeout-failure.result }}"
+          echo "Script Error Job: ${{ needs.simulate-script-error.result }}"
+          
+          echo ""
+          echo "This workflow is designed to fail to test the Actions-Autofix system."
+          echo "If you see this message, the autofix workflow should trigger soon!"
