@@ -131,7 +131,7 @@ jobs:
             ## 🤖 Copilot Coding Agent Suitability Assessment
             
             ### Recommendation
-            [Recommend: SUITABLE, NOT SUITABLE, or MAYBE SUITABLE for Copilot coding agent assignment]
+            [Provide ONLY one of these two options: "SUITABLE" or "NOT SUITABLE"]
             
             ### Reasoning
             Based on GitHub's best practices for Copilot coding agent tasks, evaluate this issue against these criteria:
@@ -252,23 +252,40 @@ jobs:
               
               return { action: 'commented', issue: duplicateIssue.number };
             } else {
+              // Parse AI recommendation for Copilot suitability
+              const copilotSuitable = aiAnalysis.includes('### Recommendation\nSUITABLE') || 
+                                     aiAnalysis.includes('### Recommendation\n**SUITABLE**') ||
+                                     aiAnalysis.includes('Recommendation: SUITABLE');
+              
+              // Determine labels based on AI recommendation
+              const baseLabels = [
+                'bug',
+                'workflow-failure',
+                'automated',
+                `workflow:${workflowRun.name}`,
+                `branch:${workflowRun.head_branch}`
+              ];
+              
+              // Add Copilot recommendation label
+              if (copilotSuitable) {
+                baseLabels.push('Fix with Copilot');
+              } else {
+                baseLabels.push('Assign to human');
+              }
+              
               // Create new issue
               const { data: issue } = await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: [
-                  'bug',
-                  'workflow-failure',
-                  'automated',
-                  `workflow:${workflowRun.name}`,
-                  `branch:${workflowRun.head_branch}`
-                ]
+                labels: baseLabels
               });
               
               console.log(`Created issue #${issue.number}`);
-              return { action: 'created', issue: issue.number };
+              console.log(`Copilot suitable: ${copilotSuitable ? 'Yes' : 'No'}`);
+              console.log(`Labels applied: ${baseLabels.join(', ')}`);
+              return { action: 'created', issue: issue.number, copilotSuitable: copilotSuitable };
             }
       
       - name: Report action taken
