@@ -9,7 +9,7 @@ Actions-Autofix is an intelligent GitHub Actions workflow that automatically mon
 ## ✨ Key Features
 
 ### 🤖 **AI-Powered Failure Analysis**
-- Uses OpenAI's GPT-4o-mini model to analyze workflow failures
+- Uses Azure OpenAI's GPT-4 1-nano model to analyze workflow failures
 - Provides structured technical analysis without proposing fixes
 - Identifies root causes, error categories, and impact assessments
 
@@ -56,7 +56,7 @@ if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 - Collects job metadata (names, timestamps, URLs)
 
 ### 4. **AI Analysis**
-- Sends failure data to GPT-4o-mini for analysis
+- Sends failure data to Azure OpenAI GPT-4 1-nano for analysis
 - Receives structured technical analysis focusing on:
   - **Root Cause**: Primary reason for failure
   - **Technical Details**: Specific breakdown of what went wrong
@@ -259,14 +259,15 @@ branches-ignore: ["feature/*", "dependabot/*", "renovate/*"]
 
 ### AI Model Options
 ```yaml
-# Fast and cost-effective (recommended for most use cases)
-model: gpt-4o-mini
+# Fast and cost-effective (default - Azure OpenAI)
+model: azure-openai/gpt-4-1-nano
 
-# More detailed analysis (higher cost, slower)
-model: gpt-4
+# Alternative OpenAI models
+model: openai/gpt-4o-mini
+model: openai/gpt-4
 
-# Alternative models (check actions/ai-inference docs)
-model: claude-3-sonnet
+# Alternative providers (check actions/ai-inference docs for available models)
+model: anthropic/claude-3-sonnet
 ```
 
 ### Custom Failure Thresholds
@@ -289,7 +290,7 @@ on:
 - **Storage**: Issues created in your repository
 
 ### Cost Optimization Tips
-1. **Use `gpt-4o-mini`** for most scenarios (faster, cheaper)
+1. **Use `azure-openai/gpt-4-1-nano`** for most scenarios (fast, cost-effective, default)
 2. **Filter branches** to avoid analyzing feature branch failures
 3. **Monitor specific workflows** instead of using `["*"]` if you have many workflows
 4. **Set up branch protection** to prevent excessive triggering
@@ -365,7 +366,7 @@ This project is licensed under the terms specified in the LICENSE file.
 **Issue**: AI analysis is empty or generic
 - ✅ Check if workflow logs were retrieved successfully
 - ✅ Verify AI inference action has proper permissions
-- ✅ Try a different AI model (gpt-4 vs gpt-4o-mini)
+- ✅ Try a different AI model (azure-openai/gpt-4-1-nano vs openai/gpt-4o-mini)
 - ✅ Check log truncation - very large logs may be cut off
 
 **Issue**: Duplicate issues being created

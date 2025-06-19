@@ -85,7 +85,7 @@ jobs:
         uses: actions/ai-inference@v1
         id: ai-analysis
         with:
-          model: gpt-4o-mini
+          model: azure-openai/gpt-4-1-nano
           prompt: |
             You are an expert DevOps engineer analyzing a GitHub Actions workflow failure. 
             
