@@ -138,7 +138,7 @@ jobs:
             const title = `🚨 Workflow Failure: ${workflowRun.name} on ${workflowRun.head_branch}`;
             
             // Create detailed issue body with AI analysis
-            const aiAnalysis = `${{ steps.ai-analysis.outputs.response }}`;
+            const aiAnalysis = ${{ toJSON(steps.ai-analysis.outputs.response) }};
             
             const body = `## Workflow Failure Report
             
