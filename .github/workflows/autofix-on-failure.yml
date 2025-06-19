@@ -127,6 +127,45 @@ jobs:
             
             ### Additional Context
             [Any other relevant observations about the failure]
+            
+            ## 🤖 Copilot Coding Agent Suitability Assessment
+            
+            ### Recommendation
+            [Recommend: SUITABLE, NOT SUITABLE, or MAYBE SUITABLE for Copilot coding agent assignment]
+            
+            ### Reasoning
+            Based on GitHub's best practices for Copilot coding agent tasks, evaluate this issue against these criteria:
+            
+            **SUITABLE tasks include:**
+            - Bug fixes with clear, isolated scope
+            - Simple feature implementations
+            - Test coverage improvements
+            - Documentation updates
+            - Accessibility improvements
+            - Technical debt resolution
+            - UI/UX improvements with clear requirements
+            
+            **NOT SUITABLE tasks include:**
+            - Complex, broadly-scoped refactoring
+            - Production-critical issues
+            - Security-related issues
+            - Tasks requiring deep domain knowledge
+            - Ambiguous or open-ended requirements
+            - Large architectural changes
+            - Issues involving business logic decisions
+            - Incident response situations
+            
+            ### Task Scope Assessment
+            [Evaluate if this issue has clear scope, specific requirements, and identifiable files to change]
+            
+            ### Complexity Level
+            [Assess: LOW, MEDIUM, or HIGH complexity and explain why]
+            
+            ### Required Context
+            [Identify what domain knowledge or context would be needed to fix this issue]
+            
+            ### Recommendation Summary
+            [Provide a 1-2 sentence summary of whether this should be assigned to Copilot coding agent and why]
 
       - name: Create failure issue
         uses: actions/github-script@v7
