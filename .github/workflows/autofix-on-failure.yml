@@ -86,7 +86,7 @@ jobs:
         uses: actions/ai-inference@v1
         id: ai-analysis
         with:
-          model: openai/gpt-4o-mini
+          model: openai/gpt-4.1-mini
           max-tokens: 3000
           prompt: |
             You are an expert DevOps engineer analyzing a GitHub Actions workflow failure. 
